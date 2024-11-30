@@ -14,10 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import freenet.support.math.MersenneTwister;
-
 import freenet.crypt.AEADCryptBucket;
-
 import freenet.crypt.EncryptedRandomAccessBucket;
 import freenet.crypt.EncryptedRandomAccessBuffer;
 import freenet.crypt.MasterSecret;
@@ -30,6 +27,7 @@ import freenet.support.api.BucketFactory;
 import freenet.support.api.LockableRandomAccessBuffer;
 import freenet.support.api.RandomAccessBucket;
 import freenet.support.api.RandomAccessBuffer;
+import freenet.support.math.MersenneTwister;
 
 /**
  * Helper functions for working with Buckets.

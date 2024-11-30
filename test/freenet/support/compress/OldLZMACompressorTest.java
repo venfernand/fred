@@ -3,7 +3,7 @@
 * http://www.gnu.org/ for further details of the GPL. */
 package freenet.support.compress;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
