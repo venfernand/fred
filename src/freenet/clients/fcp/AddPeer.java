@@ -13,6 +13,7 @@ import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import freenet.client.FetchException;
@@ -116,7 +117,7 @@ public class AddPeer extends FCPMessage {
 			try {
 				try {
 					FreenetURI refUri = new FreenetURI(urlString);
-					HighLevelSimpleClient client = node.clientCore.makeClient(
+					HighLevelSimpleClient client = node.getClientCore().makeClient(
 							RequestStarter.IMMEDIATE_SPLITFILE_PRIORITY_CLASS,
 							true,
 							true);
@@ -132,7 +133,7 @@ public class AddPeer extends FCPMessage {
 				throw new MessageInvalidException(ProtocolErrorMessage.URL_PARSE_ERROR, "IO error while retrieving ref URL <"+urlString+">: "+e.getMessage(), identifier, false);
 			}
 			ref = new StringBuilder(ref.toString().trim());
-			if("".equals(ref.toString())) {
+			if(ref.toString().isEmpty()) {
 				throw new MessageInvalidException(ProtocolErrorMessage.REF_PARSE_ERROR, "Error parsing ref from URL <"+urlString+ '>', identifier, false);
 			}
 			try {
@@ -146,7 +147,7 @@ public class AddPeer extends FCPMessage {
 				throw new MessageInvalidException(ProtocolErrorMessage.NOT_A_FILE_ERROR, "The given ref file path <"+fileString+"> is not a file", identifier, false);
 			}
 			try {
-				in = new BufferedReader(new InputStreamReader(new FileInputStream(f), "UTF-8"));
+				in = new BufferedReader(new InputStreamReader(new FileInputStream(f), StandardCharsets.UTF_8));
 				ref = new StringBuilder(1024);
 				String line;
 				while((line = in.readLine()) != null) {
@@ -160,7 +161,7 @@ public class AddPeer extends FCPMessage {
 				throw new MessageInvalidException(ProtocolErrorMessage.FILE_PARSE_ERROR, "IO error while retrieving ref file <"+fileString+">: "+e.getMessage(), identifier, false);
 			}
 			ref = new StringBuilder(ref.toString().trim());
-			if("".equals(ref.toString())) {
+			if(ref.toString().isEmpty()) {
 				throw new MessageInvalidException(ProtocolErrorMessage.REF_PARSE_ERROR, "Error parsing ref from file <"+fileString+ '>', identifier, false);
 			}
 			try {

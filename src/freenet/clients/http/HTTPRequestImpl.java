@@ -122,7 +122,7 @@ public class HTTPRequestImpl implements HTTPRequest {
 		this.data = null;
 		this.parts = null;
 		this.bucketfactory = null;
-		if ((encodedQueryString!=null) && (encodedQueryString.length()>0)) {
+		if ((encodedQueryString!=null) && !encodedQueryString.isEmpty()) {
 			this.uri = new URI(path+ '?' +encodedQueryString);
 		} else {
 			this.uri = new URI(path);
@@ -205,12 +205,7 @@ public class HTTPRequestImpl implements HTTPRequest {
 			for (Entry<String, List<String>> parameterValues : parameters.entrySet()) {
 				List<String> values = parameterValues.getValue();
 				String value = values.get(values.size() - 1);
-				byte[] buf;
-				try {
-					buf = value.getBytes("UTF-8");
-				} catch (UnsupportedEncodingException e) {
-					throw new Error("Impossible: JVM doesn't support UTF-8: " + e, e);
-				} // FIXME some other encoding?
+				byte[] buf = value.getBytes(StandardCharsets.UTF_8);
 				RandomAccessBucket b = new SimpleReadOnlyArrayBucket(buf);
 				parts.put(parameterValues.getKey(), b);
 				if(logMINOR)
@@ -277,7 +272,7 @@ public class HTTPRequestImpl implements HTTPRequest {
 		Map<String, List<String>> parameters = new HashMap<String, List<String>>();
 
 		// nothing to do if there was no query string in the URI
-		if ((queryString == null) || (queryString.length() == 0)) {
+		if ((queryString == null) || queryString.isEmpty()) {
 			return parameters;
 		}
 
@@ -665,11 +660,7 @@ public class HTTPRequestImpl implements HTTPRequest {
 	@Override
 	@Deprecated
 	public String getPartAsString(String name, int maxlength) {
-		try {
-			return new String(getPartAsBytes(name, maxlength), "UTF-8");
-		} catch (UnsupportedEncodingException e) {
-			throw new Error("Impossible: JVM doesn't support UTF-8: " + e, e);
-		}
+		return new String(getPartAsBytes(name, maxlength), StandardCharsets.UTF_8);
 	}
 	
 	@Override
@@ -694,11 +685,7 @@ public class HTTPRequestImpl implements HTTPRequest {
 	}
 	
 	private String getPartAsLimitedString(Bucket part, int maxLength) {
-		try {
-			return new String(getPartAsLimitedBytes(part, maxLength), "UTF-8");
-		} catch (UnsupportedEncodingException e) {
-			throw new Error("Impossible: JVM doesn't support UTF-8: " + e, e);
-		}
+		return new String(getPartAsLimitedBytes(part, maxLength), StandardCharsets.UTF_8);
 	}
 
 	/* (non-Javadoc)
@@ -890,7 +877,7 @@ public class HTTPRequestImpl implements HTTPRequest {
 	@Override
 	public boolean isIncognito() {
 		if(isParameterSet("incognito"))
-			return Boolean.valueOf(getParam("incognito"));
+			return Boolean.parseBoolean(getParam("incognito"));
 		return false;
 	}
 

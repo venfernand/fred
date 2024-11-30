@@ -250,30 +250,26 @@ public class BucketTools {
 	public static byte[] hash(Bucket data) throws IOException {
 		try (InputStream is = data.getInputStreamUnbuffered()) {
 			MessageDigest md = SHA256.getMessageDigest();
-			try {
-				long bucketLength = data.size();
-				long bytesRead = 0;
-				byte[] buf = new byte[BUFFER_SIZE];
-				while ((bytesRead < bucketLength) || (bucketLength == -1)) {
-					int readBytes = is.read(buf);
-					if (readBytes < 0) {
-						break;
-					}
-					bytesRead += readBytes;
-					if (readBytes > 0) {
-						md.update(buf, 0, readBytes);
-					}
+			long bucketLength = data.size();
+			long bytesRead = 0;
+			byte[] buf = new byte[BUFFER_SIZE];
+			while ((bytesRead < bucketLength) || (bucketLength == -1)) {
+				int readBytes = is.read(buf);
+				if (readBytes < 0) {
+					break;
 				}
-				if ((bytesRead < bucketLength) && (bucketLength > 0)) {
-					throw new EOFException();
+				bytesRead += readBytes;
+				if (readBytes > 0) {
+					md.update(buf, 0, readBytes);
 				}
-				if ((bytesRead != bucketLength) && (bucketLength > 0)) {
-					throw new IOException("Read " + bytesRead + " but bucket length " + bucketLength + " on " + data + '!');
-				}
-				return md.digest();
-			} finally {
-				SHA256.returnMessageDigest(md);
 			}
+			if ((bytesRead < bucketLength) && (bucketLength > 0)) {
+				throw new EOFException();
+			}
+			if ((bytesRead != bucketLength) && (bucketLength > 0)) {
+				throw new IOException("Read " + bytesRead + " but bucket length " + bucketLength + " on " + data + '!');
+			}
+			return md.digest();
 		}
 	}
 
@@ -418,7 +414,7 @@ public class BucketTools {
 	 * @param bf
 	 * @param length
 	 * 
-	 * @return the paded bucket
+	 * @return the padded bucket
 	 */
 	public static Bucket pad(Bucket oldBucket, int blockLength, BucketFactory bf, int length) throws IOException {
 		byte[] hash = BucketTools.hash(oldBucket);

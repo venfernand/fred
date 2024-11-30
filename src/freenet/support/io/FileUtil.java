@@ -103,8 +103,8 @@ final public class FileUtil {
 			this.isWindows = win;
 			this.isMac = mac;
 			this.isUnix = unix;
-		};
-	};
+		}
+	}
 	
 	public enum CPUArchitecture {
 	    Unknown,

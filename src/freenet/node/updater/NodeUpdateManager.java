@@ -153,8 +153,18 @@ public class NodeUpdateManager {
 	private boolean broadcastUOMAnnouncesOld = false;
 	private boolean broadcastUOMAnnouncesNew = false;
 
+	/**
+	 * @deprecated Use {@link #getNode()} instead of accessing this directly.
+	 */
+	@Deprecated
+	/* It’s not the field that is deprecated but accessing it directly is. */
 	public final Node node;
 
+	/**
+	 * @deprecated Use {@link #getRevocationChecker()} instead of accessing this directly.
+	 */
+	@Deprecated
+	/* It’s not the field that is deprecated but accessing it directly is. */
 	final RevocationChecker revocationChecker;
 	private String revocationMessage;
 	private volatile boolean hasBeenBlown;
@@ -176,6 +186,11 @@ public class NodeUpdateManager {
 	// Update alert
 	private final UpdatedVersionAvailableUserAlert alert;
 
+	/**
+	 * @deprecated Use {@link #getUpdateOverMandatory()} instead of accessing this directly.
+	 */
+	@Deprecated
+	/* It’s not the field that is deprecated but accessing it directly is. */
 	public final UpdateOverMandatoryManager uom;
 
 	private static volatile boolean logMINOR;
@@ -309,9 +324,9 @@ public class NodeUpdateManager {
 
 		};
 
-		transitionMainJarFile = new File(node.clientCore.getPersistentTempDir(), transitionMainJarFilename);
+		transitionMainJarFile = new File(node.getClientCore().getPersistentTempDir(), transitionMainJarFilename);
 		transitionMainJarFetcher = new LegacyJarFetcher(previousMainJarSSK,
-				transitionMainJarFile, node.clientCore,
+				transitionMainJarFile, node.getClientCore(),
 				legacyFetcherCallback);
 
 		updaterConfig.register("updateSeednodes", wasEnabledOnStartup, 6, true,
@@ -374,7 +389,7 @@ public class NodeUpdateManager {
 		updaterConfig.finishedInitialization();
 
 		this.revocationChecker = new RevocationChecker(this, new File(
-				node.clientCore.getPersistentTempDir(), "revocation-key.fblob"));
+				node.getClientCore().getPersistentTempDir(), "revocation-key.fblob"));
 
 		this.uom = new UpdateOverMandatoryManager(this);
 		this.uom.removeOldTempFiles();
@@ -410,7 +425,7 @@ public class NodeUpdateManager {
 		}
 
 		public void start(short priority, long maxSize) {
-			HighLevelSimpleClient hlsc = node.clientCore.makeClient(priority,
+			HighLevelSimpleClient hlsc = node.getClientCore().makeClient(priority,
 					false, false);
 			FetchContext context = hlsc.getFetchContext();
 			context.maxNonSplitfileRetries = -1;
@@ -420,7 +435,7 @@ public class NodeUpdateManager {
 			ClientGetter get = new ClientGetter(this, freenetURI, context,
 					priority, null, null, null);
 			try {
-				node.clientCore.clientContext.start(get);
+				node.getClientCore().getClientContext().start(get);
 			} catch (PersistenceDisabledException e) {
 				// Impossible
 			} catch (FetchException e) {
@@ -454,7 +469,7 @@ public class NodeUpdateManager {
 										+ filename
 										+ " after fetching it from Freenet.");
 						try {
-							Thread.sleep(SECONDS.toMillis(1) + node.fastWeakRandom.nextInt((int) SECONDS.toMillis((long) Math.min(Math.pow(2, i), MINUTES.toSeconds(15)))));
+							Thread.sleep(SECONDS.toMillis(1) + node.getFastWeakRandom().nextInt((int) SECONDS.toMillis((long) Math.min(Math.pow(2, i), MINUTES.toSeconds(15)))));
 						} catch (InterruptedException e) {
 							// Ignore
 						}
@@ -489,7 +504,7 @@ public class NodeUpdateManager {
 
         @Override
         public RequestClient getRequestClient() {
-            return node.nonPersistentClientBulk;
+            return node.getNonPersistentClientBulk();
         }
 
 	}
@@ -532,7 +547,7 @@ public class NodeUpdateManager {
 
 	public void start() throws InvalidConfigValueException {
 
-		node.clientCore.alerts.register(alert);
+		node.getClientCore().getAlerts().register(alert);
 
 		enable(wasEnabledOnStartup);
 
@@ -579,7 +594,7 @@ public class NodeUpdateManager {
 			broadcastUOMAnnouncesOld = true;
 			msg = getOldUOMAnnouncement();
 		}
-		node.peers.localBroadcast(msg, true, true, ctr, 0, TRANSITION_VERSION-1);
+		node.getPeers().localBroadcast(msg, true, true, ctr, 0, TRANSITION_VERSION-1);
 	}
 
 	void broadcastUOMAnnouncesNew() {
@@ -593,7 +608,7 @@ public class NodeUpdateManager {
 			msg = getNewUOMAnnouncement(size);
 		}
 		if(logMINOR) Logger.minor(this, "Broadcasting UOM announcements (new)");
-		node.peers.localBroadcast(msg, true, true, ctr, TRANSITION_VERSION, Integer.MAX_VALUE);
+		node.getPeers().localBroadcast(msg, true, true, ctr, TRANSITION_VERSION, Integer.MAX_VALUE);
 	}
 
 	/** Return the length of the data fetched for the current version, or -1. */
@@ -628,8 +643,8 @@ public class NodeUpdateManager {
                 .getRevocationDNFCounter(), revocationChecker
                 .getBlobSize(),
                 mainJarAvailable ? transitionMainJarFetcher.getBlobSize() : -1,
-                (int) node.nodeStats.getNodeAveragePingTime(),
-                (int) node.nodeStats.getBwlimitDelayTime());
+                (int) node.getNodeStats().getNodeAveragePingTime(),
+                (int) node.getNodeStats().getBwlimitDelayTime());
 	}
 
 	private Message getNewUOMAnnouncement(long blobSize) {
@@ -641,8 +656,8 @@ public class NodeUpdateManager {
 						.getRevocationDNFCounter(), revocationChecker
 						.getBlobSize(),
 				blobSize,
-				(int) node.nodeStats.getNodeAveragePingTime(),
-				(int) node.nodeStats.getBwlimitDelayTime());
+				(int) node.getNodeStats().getNodeAveragePingTime(),
+				(int) node.getNodeStats().getBwlimitDelayTime());
 	}
 
 	public void maybeSendUOMAnnounce(PeerNode peer) {
@@ -787,9 +802,9 @@ public class NodeUpdateManager {
 		// @see https://emu.freenetproject.org/pipermail/devl/2015-November/038581.html
 		long minVer = (plugin.essential ? plugin.minimumVersion : plugin.recommendedVersion);
 		// But it might already be past that ...
-		PluginInfoWrapper info = node.pluginManager.getPluginInfo(name);
+		PluginInfoWrapper info = node.getPluginManager().getPluginInfo(name);
 		if (info == null) {
-			if (!(node.pluginManager.isPluginLoadedOrLoadingOrWantLoad(name))) {
+			if (!(node.getPluginManager().isPluginLoadedOrLoadingOrWantLoad(name))) {
 				if (logMINOR)
 					Logger.minor(this, "Plugin not loaded");
 				return;
@@ -800,7 +815,7 @@ public class NodeUpdateManager {
 		FreenetURI uri = updateURI.setDocName(name).setSuggestedEdition(minVer);
 		PluginJarUpdater updater = new PluginJarUpdater(this, uri,
 				(int) minVer, -1, (plugin.essential ? (int)minVer : Integer.MAX_VALUE)
-				, name + "-", name, node.pluginManager, autoDeployPluginsOnRestart);
+				, name + "-", name, node.getPluginManager(), autoDeployPluginsOnRestart);
 		synchronized (this) {
 			if (pluginUpdaters == null) {
 				if (logMINOR)
@@ -1122,7 +1137,7 @@ public class NodeUpdateManager {
 			t.printStackTrace();
 			failUpdate(t.getMessage());
 			String error = l10n("updateFailedInternalError", "reason", t.getMessage());
-			node.clientCore.alerts.register(new SimpleUserAlert(false,
+			node.getClientCore().getAlerts().register(new SimpleUserAlert(false,
 					error, error, error, UserAlert.CRITICAL_ERROR));
 		} finally {
 			if(started && !success) {
@@ -1237,12 +1252,12 @@ public class NodeUpdateManager {
 			return false;
 		} catch (UpdateCatastropheException e) {
 			failUpdate(e.getMessage());
-			node.clientCore.alerts.register(new SimpleUserAlert(false,
+			node.getClientCore().getAlerts().register(new SimpleUserAlert(false,
 					l10n("updateCatastropheTitle"), e.getMessage(),
 					l10n("updateCatastropheTitle"), UserAlert.CRITICAL_ERROR));
 			return false;
 		} catch (UpdaterParserException e) {
-			node.clientCore.alerts.register(new SimpleUserAlert(false,
+			node.getClientCore().getAlerts().register(new SimpleUserAlert(false,
 					l10n("updateFailedTitle"), e.getMessage(), l10n(
 							"updateFailedShort", "reason", e.getMessage()),
 					UserAlert.CRITICAL_ERROR));
@@ -1393,7 +1408,7 @@ public class NodeUpdateManager {
 		Logger.error(this, "Update failed: " + reason);
 		System.err.println("Update failed: " + reason);
 		this.killUpdateAlerts();
-		node.clientCore.alerts.register(new SimpleUserAlert(true,
+		node.getClientCore().getAlerts().register(new SimpleUserAlert(true,
 				l10n("updateFailedTitle"), l10n("updateFailed", "reason",
 						reason), l10n("updateFailedShort", "reason", reason),
 				UserAlert.CRITICAL_ERROR));
@@ -1520,7 +1535,7 @@ public class NodeUpdateManager {
 		if (revocationAlert == null) {
 			revocationAlert = new RevocationKeyFoundUserAlert(msg,
 					disabledNotBlown);
-			node.clientCore.alerts.register(revocationAlert);
+			node.getClientCore().getAlerts().register(revocationAlert);
 			// we don't need to advertize updates : we are not going to do them
 			killUpdateAlerts();
 		}
@@ -1533,7 +1548,7 @@ public class NodeUpdateManager {
 	 * Kill all UserAlerts asking the user whether he wants to update.
 	 */
 	private void killUpdateAlerts() {
-		node.clientCore.alerts.unregister(alert);
+		node.getClientCore().getAlerts().unregister(alert);
 	}
 
 	/** Called when the RevocationChecker has got 3 DNFs on the revocation key */
@@ -1542,12 +1557,12 @@ public class NodeUpdateManager {
 		deployPluginUpdates();
 		// If we're still here, we didn't update.
 		broadcastUOMAnnouncesNew();
-		node.ticker.queueTimedJob(new Runnable() {
+		node.getTicker().queueTimedJob(new Runnable() {
 			@Override
 			public void run() {
 				revocationChecker.start(false);
 			}
-		}, node.random.nextInt((int) DAYS.toMillis(1)));
+		}, node.getRandom().nextInt((int) DAYS.toMillis(1)));
 	}
 
 	private void deployPluginUpdates() {
@@ -1585,7 +1600,7 @@ public class NodeUpdateManager {
 	}
 
 	void deployOffThread(long delay, final boolean announce) {
-		node.ticker.queueTimedJob(new Runnable() {
+		node.getTicker().queueTimedJob(new Runnable() {
 			@Override
 			public void run() {
 				if(announce)
@@ -1782,7 +1797,7 @@ public class NodeUpdateManager {
 	/** Called inside locks, so don't lock anything */
 	public void notPeerClaimsKeyBlown() {
 		peersSayBlown = false;
-		node.executor.execute(new Runnable() {
+		node.getExecutor().execute(new Runnable() {
 
 			@Override
 			public void run() {
@@ -1822,6 +1837,11 @@ public class NodeUpdateManager {
 		return Math.max(0, REVOCATION_FETCH_TIMEOUT - (now - gotJarTime));
 	}
 
+	/**
+	 * @deprecated Use {@link #getByteCounter()} instead of accessing this directly.
+	 */
+	@Deprecated
+	/* It’s not the field that is deprecated but accessing it directly is. */
 	final ByteCounter ctr = new ByteCounter() {
 
 		@Override
@@ -1831,7 +1851,7 @@ public class NodeUpdateManager {
 
 		@Override
 		public void sentBytes(int x) {
-			node.nodeStats.reportUOMBytesSent(x);
+			node.getNodeStats().reportUOMBytesSent(x);
 		}
 
 		@Override
@@ -1886,7 +1906,7 @@ public class NodeUpdateManager {
 			// Normally this means we won't send UOM.
 			// However, if something breaks severely, we need an escape route.
 			if (node.getUptime() > MINUTES.toMillis(5)
-					&& node.peers.countCompatibleRealPeers() == 0)
+					&& node.getPeers().countCompatibleRealPeers() == 0)
 				return false;
 			return true;
 		}
@@ -1960,6 +1980,22 @@ public class NodeUpdateManager {
 
 	MainJarUpdater getMainUpdater() {
 		return mainUpdater;
+	}
+
+	public Node getNode() {
+		return node;
+	}
+
+	public RevocationChecker getRevocationChecker() {
+		return revocationChecker;
+	}
+
+	public UpdateOverMandatoryManager getUpdateOverMandatory() {
+		return uom;
+	}
+
+	public ByteCounter getByteCounter() {
+		return ctr;
 	}
 
 }
