@@ -18,7 +18,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.io.UnsupportedEncodingException;
 import java.io.Writer;
 import java.net.MalformedURLException;
 import java.nio.charset.StandardCharsets;
@@ -37,8 +36,6 @@ import java.util.regex.PatternSyntaxException;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import org.tanukisoftware.wrapper.WrapperManager;
-
 import freenet.client.FetchException;
 import freenet.crypt.SHA256;
 import freenet.keys.FreenetURI;
@@ -53,6 +50,7 @@ import freenet.support.io.FileUtil;
 import freenet.support.io.FileUtil.CPUArchitecture;
 import freenet.support.io.FileUtil.OperatingSystem;
 import freenet.support.io.NativeThread;
+import org.tanukisoftware.wrapper.WrapperManager;
 
 /**
  * Parses the dependencies.properties file and ensures we have all the 
@@ -899,15 +897,7 @@ outer:	for(String propName : props.stringPropertyNames()) {
 		return true;
 	}
 	
-	static final byte[] SCRIPT_HEAD;
-	
-	static {
-	    try {
-	        SCRIPT_HEAD = "#!".getBytes("UTF-8");
-	    } catch(UnsupportedEncodingException e) {
-	        throw new Error(e);
-	    }
-	}
+	static final byte[] SCRIPT_HEAD = "#!".getBytes(StandardCharsets.UTF_8);
 	
 	private boolean isOnPathNotAScript(String toFind) {
 	    String path = System.getenv("PATH"); // Upper case should work on both linux and Windows
@@ -1548,8 +1538,6 @@ outer:	for(String propName : props.stringPropertyNames()) {
                     return false;
                 }
                 return true;
-            } catch (UnsupportedEncodingException e) {
-                throw new Error(e);
             } catch (IOException e) {
                 failed = true;
                 return false;

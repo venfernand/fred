@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -31,8 +32,6 @@ import java.util.jar.Attributes;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 
-import org.tanukisoftware.wrapper.WrapperManager;
-
 import freenet.client.HighLevelSimpleClient;
 import freenet.clients.fcp.ClientPut;
 import freenet.clients.http.PageMaker.THEME;
@@ -41,6 +40,7 @@ import freenet.clients.http.Toadlet;
 import freenet.config.InvalidConfigValueException;
 import freenet.config.NodeNeedRestartException;
 import freenet.config.SubConfig;
+import freenet.crypt.HashType;
 import freenet.crypt.SHA256;
 import freenet.keys.FreenetURI;
 import freenet.l10n.BaseL10n.LANGUAGE;
@@ -66,6 +66,7 @@ import freenet.support.api.HTTPRequest;
 import freenet.support.api.StringArrCallback;
 import freenet.support.io.FileUtil;
 import freenet.support.io.NativeThread.PriorityLevel;
+import org.tanukisoftware.wrapper.WrapperManager;
 
 public class PluginManager {
 
@@ -98,7 +99,7 @@ public class PluginManager {
 		// config
 
 		this.node = node;
-		this.core = node.clientCore;
+		this.core = node.getClientCore();
 
 		if(logMINOR)
 			Logger.minor(this, "Starting Plugin Manager");
@@ -110,9 +111,9 @@ public class PluginManager {
 
 		// callback executor
 		executor = new SerialExecutor(PriorityLevel.NORM_PRIORITY.value);
-		executor.start(node.executor, "PM callback executor");
+		executor.start(node.getExecutor(), "PM callback executor");
 
-        SubConfig pmconfig = node.config.createSubConfig("pluginmanager");
+        SubConfig pmconfig = node.getConfig().createSubConfig("pluginmanager");
         pmconfig.register("enabled", true, 0, true, true, "PluginManager.enabled", "PluginManager.enabledLong", new BooleanCallback() {
 
             @Override
@@ -168,33 +169,12 @@ public class PluginManager {
 			System.err.println("KeyExplorer plugin renamed to KeyUtils");
 		}
 
-		// This should default to false. Even though we use SSL, a wiretapper may be able to tell which
-		// plugin is being loaded, and correlate that with identity creation; plus of course they can see
-		// that somebody is using Freenet.
-		pmconfig.register("alwaysLoadOfficialPluginsFromCentralServer", false, 0, false, false, "PluginManager.alwaysLoadPluginsFromCentralServer", "PluginManager.alwaysLoadPluginsFromCentralServerLong", new BooleanCallback() {
-
-			@Override
-			public Boolean get() {
-				return alwaysLoadOfficialPluginsFromCentralServer;
-			}
-
-			@Override
-			public void set(Boolean val) throws InvalidConfigValueException, NodeNeedRestartException {
-				alwaysLoadOfficialPluginsFromCentralServer = val;
-			}
-
-		});
-
-		alwaysLoadOfficialPluginsFromCentralServer = pmconfig.getBoolean("alwaysLoadOfficialPluginsFromCentralServer");
-		if (lastVersion <= 1437) {
-			// Overwrite this setting, since it will have been set by the old callback and then written as it's not default.
-			// FIXME remove back compatibility code.
-			alwaysLoadOfficialPluginsFromCentralServer = false;
-		}
+		// ignore this in config files.
+		pmconfig.registerIgnoredOption("alwaysLoadOfficialPluginsFromCentralServer");
 
 		pmconfig.finishedInitialization();
 
-		fproxyTheme = THEME.themeFromName(node.config.get("fproxy").getString("css"));
+		fproxyTheme = THEME.themeFromName(node.getConfig().get("fproxy").getString("css"));
 		selfinstance = this;
 	}
 
@@ -259,9 +239,15 @@ public class PluginManager {
 		while(true) {
 			int delta = (int) (deadline - now);
 			if(delta <= 0) {
-				String list = pluginList(loadedPlugins.getLoadedPlugins());
+				String list = "";
+				try {
+					list = pluginList(loadedPlugins.getLoadedPlugins());
 				Logger.error(this, "Plugins still shutting down at timeout:\n"+list);
 				System.err.println("Plugins still shutting down at timeout:\n"+list);
+				} catch (ConcurrentModificationException e) {
+					Logger.error(this, "Error during shutdown: "+ e);
+					Logger.error(this, "Plugins still shutting down at timeout:\n"+list);
+				}
 			} else {
 				for (PluginInfoWrapper pluginInfoWrapper : loadedPlugins.getLoadedPlugins()) {
 					System.out.println("Waiting for plugin to finish shutting down: " + pluginInfoWrapper.getFilename());
@@ -318,7 +304,7 @@ public class PluginManager {
 
 		OfficialPluginDescription desc;
 		if((desc = isOfficialPlugin(pluginname)) != null) {
-			return startPluginOfficial(pluginname, store, desc, false, false);
+			return startPluginOfficial(pluginname, store, desc);
 		}
 
 		try {
@@ -338,18 +324,35 @@ public class PluginManager {
 		return startPluginURL(pluginname, store);
 	}
 
-	public PluginInfoWrapper startPluginOfficial(final String pluginname, boolean store, boolean force, boolean forceHTTPS) {
-		return startPluginOfficial(pluginname, store, officialPlugins.get(pluginname), force, forceHTTPS);
+	public PluginInfoWrapper startPluginOfficial(final String pluginname, boolean store) {
+		return startPluginOfficial(pluginname, store, officialPlugins.get(pluginname));
 	}
 
-	public PluginInfoWrapper startPluginOfficial(final String pluginname, boolean store, OfficialPluginDescription desc, boolean force, boolean forceHTTPS) {
-		if((alwaysLoadOfficialPluginsFromCentralServer && !force)|| force && forceHTTPS) {
-			return realStartPlugin(new PluginDownLoaderOfficialHTTPS(), pluginname, store,
-				desc.alwaysFetchLatestVersion);
-		} else {
+	/**
+	 * Use {@link #startPluginOfficial(String, boolean)}.
+	 *
+	 * @param force This parameter is ignored.
+	 * @param forceHTTPS This parameter is ignored.
+	 */
+	@Deprecated
+	public PluginInfoWrapper startPluginOfficial(final String pluginname, boolean store, boolean force, boolean forceHTTPS) {
+		return startPluginOfficial(pluginname, store);
+	}
+
+	public PluginInfoWrapper startPluginOfficial(final String pluginname, boolean store, OfficialPluginDescription desc) {
 			return realStartPlugin(new PluginDownLoaderOfficialFreenet(client, node, false),
 				pluginname, store, desc.alwaysFetchLatestVersion);
 		}
+
+	/**
+	 * Use {@link #startPluginOfficial(String, boolean, OfficialPluginDescription)}.
+	 *
+	 * @param force This parameter is ignored.
+	 * @param forceHTTPS This parameter is ignored.
+	 */
+	@Deprecated
+	public PluginInfoWrapper startPluginOfficial(final String pluginname, boolean store, OfficialPluginDescription officialPluginDescription, boolean force, boolean forceHTTPS) {
+		return startPluginOfficial(pluginname, store, officialPluginDescription);
 	}
 
 	public PluginInfoWrapper startPluginFile(final String filename, boolean store) {
@@ -366,7 +369,7 @@ public class PluginManager {
 
 	private PluginInfoWrapper realStartPlugin(final PluginDownLoader<?> pdl, final String filename, final boolean store, boolean alwaysDownload) {
 	    if (!enabled) throw new IllegalStateException("Plugins disabled");
-		if(filename.trim().length() == 0)
+		if(filename.trim().isEmpty())
 			return null;
 		final PluginProgress pluginProgress = new PluginProgress(filename, pdl);
 		loadedPlugins.addStartingPlugin(pluginProgress);
@@ -403,10 +406,10 @@ public class PluginManager {
 				}
 			}
 			PluginLoadFailedUserAlert newAlert =
-				new PluginLoadFailedUserAlert(filename, pdl.isOfficialPluginLoader(), pdl.isOfficialPluginLoader() && pdl.isLoadingFromFreenet(), stillTrying, e);
+				new PluginLoadFailedUserAlert(filename, pdl.isOfficialPluginLoader(), stillTrying, e);
 			PluginLoadFailedUserAlert oldAlert = loadedPlugins.replaceUserAlert(filename, newAlert);
-			core.alerts.register(newAlert);
-			core.alerts.unregister(oldAlert);
+			core.getAlerts().register(newAlert);
+			core.getAlerts().unregister(oldAlert);
 		} catch (UnsupportedClassVersionError e) {
 			Logger.error(this, "Could not load plugin " + filename + " : " + e,
 					e);
@@ -415,10 +418,10 @@ public class PluginManager {
 			System.err.println("Plugin " + filename + " appears to require a later JVM");
 			Logger.error(this, "Plugin " + filename + " appears to require a later JVM");
 			PluginLoadFailedUserAlert newAlert =
-				new PluginLoadFailedUserAlert(filename, pdl.isOfficialPluginLoader(), pdl.isOfficialPluginLoader() && pdl.isLoadingFromFreenet(), false, l10n("pluginReqNewerJVMTitle", "name", filename));
+				new PluginLoadFailedUserAlert(filename, pdl.isOfficialPluginLoader(), false, l10n("pluginReqNewerJVMTitle", "name", filename));
 			PluginLoadFailedUserAlert oldAlert = loadedPlugins.replaceUserAlert(filename, newAlert);
-			core.alerts.register(newAlert);
-			core.alerts.unregister(oldAlert);
+			core.getAlerts().register(newAlert);
+			core.getAlerts().unregister(oldAlert);
 		} catch (Throwable e) {
 			Logger.error(this, "Could not load plugin " + filename + " : " + e, e);
 			System.err.println("Could not load plugin " + filename + " : " + e);
@@ -426,10 +429,10 @@ public class PluginManager {
 			System.err.println("Plugin "+filename+" is broken, but we want to retry after next startup");
 			Logger.error(this, "Plugin "+filename+" is broken, but we want to retry after next startup");
 			PluginLoadFailedUserAlert newAlert =
-				new PluginLoadFailedUserAlert(filename, pdl.isOfficialPluginLoader(), pdl.isOfficialPluginLoader() && pdl.isLoadingFromFreenet(), false, e);
+				new PluginLoadFailedUserAlert(filename, pdl.isOfficialPluginLoader(), false, e);
 			PluginLoadFailedUserAlert oldAlert = loadedPlugins.replaceUserAlert(filename, newAlert);
-			core.alerts.register(newAlert);
-			core.alerts.unregister(oldAlert);
+			core.getAlerts().register(newAlert);
+			core.getAlerts().unregister(oldAlert);
 		} finally {
 			loadedPlugins.removeStartingPlugin(pluginProgress);
 		}
@@ -439,7 +442,7 @@ public class PluginManager {
 				core.storeConfig();
 		}
 		if(pi != null)
-			node.nodeUpdater.startPluginUpdater(filename);
+			node.getNodeUpdater().startPluginUpdater(filename);
 		return pi;
 	}
 
@@ -460,22 +463,20 @@ public class PluginManager {
 		final String message;
 		final StackTraceElement[] stacktrace;
 		final boolean official;
-		final boolean officialFromFreenet;
-		final boolean stillTryingOverFreenet;
+		final boolean stillTrying;
 
-		public PluginLoadFailedUserAlert(String filename, boolean official, boolean officialFromFreenet, boolean stillTryingOverFreenet, String message) {
+		public PluginLoadFailedUserAlert(String filename, boolean official, boolean stillTrying, String message) {
 			this.filename = filename;
 			this.official = official;
 			this.message = message;
 			this.stacktrace = null;
-			this.officialFromFreenet = officialFromFreenet;
-			this.stillTryingOverFreenet = stillTryingOverFreenet;
+			this.stillTrying = stillTrying;
 		}
 
-		public PluginLoadFailedUserAlert(String filename, boolean official, boolean officialFromFreenet, boolean stillTryingOverFreenet, Throwable e) {
+		public PluginLoadFailedUserAlert(String filename, boolean official, boolean stillTrying, Throwable e) {
 			this.filename = filename;
 			this.official = official;
-			this.stillTryingOverFreenet = stillTryingOverFreenet;
+			this.stillTrying = stillTrying;
 			String msg;
 			if(e instanceof PluginNotFoundException) {
 				msg = e.getMessage();
@@ -487,7 +488,6 @@ public class PluginManager {
 			}
 			if(msg == null) msg = e.toString();
 			this.message = msg;
-			this.officialFromFreenet = officialFromFreenet;
 		}
 
 		@Override
@@ -498,7 +498,7 @@ public class PluginManager {
 		@Override
 		public void onDismiss() {
 			loadedPlugins.removeFailedPlugin(filename);
-			node.executor.execute(new Runnable() {
+			node.getExecutor().execute(new Runnable() {
 
 				@Override
 				public void run() {
@@ -527,28 +527,18 @@ public class PluginManager {
 				}
 			}
 
-			if(stillTryingOverFreenet) {
+			if(stillTrying) {
 				div.addChild("p", l10n("pluginLoadingFailedStillTryingOverFreenet"));
 			}
 
 			if(official) {
 				p = div.addChild("p");
-				if(officialFromFreenet)
-					p.addChild("#", l10n("officialPluginLoadFailedSuggestTryAgainFreenet"));
-				else
-					p.addChild("#", l10n("officialPluginLoadFailedSuggestTryAgainHTTPS"));
+				p.addChild("#", l10n("officialPluginLoadFailedSuggestTryAgain"));
 
+				if(!stillTrying) {
 				HTMLNode reloadForm = div.addChild("form", new String[] { "action", "method" }, new String[] { "/plugins/", "post" });
-				reloadForm.addChild("input", new String[] { "type", "name", "value" }, new String[] { "hidden", "formPassword", node.clientCore.formPassword });
-				reloadForm.addChild("input", new String[] { "type", "name", "value" }, new String[] { "hidden", "plugin-name", filename });
-				reloadForm.addChild("input", new String[] { "type", "name", "value" }, new String[] { "hidden", "pluginSource", "https" });
-				reloadForm.addChild("input", new String[] { "type", "name", "value" }, new String[] { "submit", "submit-official", l10n("officialPluginLoadFailedTryAgain") });
-
-				if(!stillTryingOverFreenet) {
-					reloadForm = div.addChild("form", new String[] { "action", "method" }, new String[] { "/plugins/", "post" });
-					reloadForm.addChild("input", new String[] { "type", "name", "value" }, new String[] { "hidden", "formPassword", node.clientCore.formPassword });
+					reloadForm.addChild("input", new String[] { "type", "name", "value" }, new String[] { "hidden", "formPassword", node.getClientCore().getFormPassword() });
 					reloadForm.addChild("input", new String[] { "type", "name", "value" }, new String[] { "hidden", "plugin-name", filename });
-					reloadForm.addChild("input", new String[] { "type", "name", "value" }, new String[] { "hidden", "pluginSource", "freenet" });
 					reloadForm.addChild("input", new String[] { "type", "name", "value" }, new String[] { "submit", "submit-official", l10n("officialPluginLoadFailedTryAgainFreenet") });
 				}
 			}
@@ -585,7 +575,7 @@ public class PluginManager {
 		public boolean isValid() {
 			boolean success = loadedPlugins.isFailedPlugin(filename);
 			if(!success) {
-				core.alerts.unregister(this);
+				core.getAlerts().unregister(this);
 			}
 			return success;
 		}
@@ -622,7 +612,7 @@ public class PluginManager {
 			// malicious plugins could try to hijack node config
 			// pages, to ill effect. Let's avoid that.
 			boolean pluginIsTryingToHijackNodeConfig = false;
-			for(SubConfig subconfig : node.config.getConfigs()) {
+			for(SubConfig subconfig : node.getConfig().getConfigs()) {
 				if(pi.getPluginClassName().equals(subconfig.getPrefix())) {
 					pluginIsTryingToHijackNodeConfig = true;
 					break;
@@ -637,16 +627,16 @@ public class PluginManager {
 		}
 
 		if(pi.isIPDetectorPlugin())
-			node.ipDetector.registerIPDetectorPlugin((FredPluginIPDetector) plug);
+			node.getIpDetector().registerIPDetectorPlugin((FredPluginIPDetector) plug);
 		if(pi.isPortForwardPlugin())
-			node.ipDetector.registerPortForwardPlugin((FredPluginPortForward) plug);
+			node.getIpDetector().registerPortForwardPlugin((FredPluginPortForward) plug);
 		if(pi.isBandwidthIndicator())
-			node.ipDetector.registerBandwidthIndicatorPlugin((FredPluginBandwidthIndicator) plug);
+			node.getIpDetector().registerBandwidthIndicatorPlugin((FredPluginBandwidthIndicator) plug);
 	}
 
 	public void cancelRunningLoads(String filename, PluginProgress exceptFor) {
 		Logger.normal(this, "Cancelling loads for plugin "+filename);
-		for (PluginProgress progress : new ArrayList<PluginProgress>(loadedPlugins.getStartingPlugins())) {
+		for (PluginProgress progress : loadedPlugins.getStartingPlugins()) {
 			if ((progress != exceptFor) && filename.equals(progress.name)) {
 				progress.kill();
 				loadedPlugins.removeStartingPlugin(progress);
@@ -1017,7 +1007,7 @@ public class PluginManager {
 	}
 
 	public OfficialPluginDescription isOfficialPlugin(String name) {
-		if((name == null) || (name.trim().length() == 0))
+		if((name == null) || name.trim().isEmpty())
 			return null;
 		List<OfficialPluginDescription> availablePlugins = findAvailablePlugins();
 		for(OfficialPluginDescription desc : availablePlugins) {
@@ -1032,7 +1022,12 @@ public class PluginManager {
 	 * must not be taken in any other circumstance. */
 	private final Object pluginLoadSyncObject = new Object();
 
-	/** All plugin updates are on a single request client. */
+	/**
+	 * All plugin updates are on a single request client.
+	 * @deprecated Use {@link #getSingleUpdaterRequestClient()} instead of accessing this directly.
+	 */
+	@Deprecated
+	/* It’s not the field that is deprecated but accessing it directly is. */
 	public final RequestClient singleUpdaterRequestClient = new RequestClientBuilder().build();
 
 	public File getPluginFilename(String pluginName) {
@@ -1181,7 +1176,7 @@ public class PluginManager {
 		if (digest == null) {
 			return;
 		}
-		String testsum = getFileDigest(pluginFile, "SHA-1");
+		String testsum = getFileDigest(pluginFile);
 		if (!(digest.equalsIgnoreCase(testsum))) {
 			Logger.error(this, "Checksum verification failed, should be " + digest + " but was " + testsum);
 			throw new PluginNotFoundException("Checksum verification failed, should be " + digest + " but was " + testsum);
@@ -1328,17 +1323,12 @@ public class PluginManager {
 		return cachedFiles;
 	}
 
-	private String getFileDigest(File file, String digest) throws PluginNotFoundException {
+	private String getFileDigest(File file) throws PluginNotFoundException {
 		final int BUFFERSIZE = 4096;
 		boolean wasFromDigest256Pool = false;
 		try {
 			MessageDigest hash;
-			if ("SHA-256".equals(digest)) {
-				hash = SHA256.getMessageDigest(); // grab digest from pool
-				wasFromDigest256Pool = true;
-			} else {
-				hash = MessageDigest.getInstance(digest);
-			}
+			hash = SHA256.getMessageDigest();
 			// We compute the hash
 			// http://java.sun.com/developer/TechTips/1998/tt0915.html#tip2
 			try (
@@ -1352,12 +1342,9 @@ public class PluginManager {
 				}
 			}
 			String result = HexUtil.bytesToHex(hash.digest());
-			if (wasFromDigest256Pool) {
-				SHA256.returnMessageDigest(hash);
-			}
 			return result;
 		} catch(Exception e) {
-			throw new PluginNotFoundException("Error while computing hash '"+digest+"' of the downloaded plugin: " + e, e);
+			throw new PluginNotFoundException("Error while computing hash of the downloaded plugin: " + e, e);
 		}
 	}
 
@@ -1519,7 +1506,7 @@ public class PluginManager {
 						try {
 							plug.setTheme(cssName);
 						} catch (Throwable t) {
-							Logger.error(this, "Cought Trowable in Callback", t);
+							Logger.error(this, "Caught Throwable in Callback", t);
 						}
 					}
 				}, "Callback");
@@ -1542,7 +1529,7 @@ public class PluginManager {
 						try {
 							plug.setLanguage(lang);
 						} catch (Throwable t) {
-							Logger.error(this, "Cought Trowable in Callback", t);
+							Logger.error(this, "Caught Throwable in Callback", t);
 						}
 					}
 				}, "Callback");
@@ -1554,7 +1541,7 @@ public class PluginManager {
 						try {
 							plug.setLanguage(lang);
 						} catch (Throwable t) {
-							Logger.error(this, "Cought Trowable in Callback", t);
+							Logger.error(this, "Caught Throwable in Callback", t);
 						}
 					}
 				}, "Callback");
@@ -1570,23 +1557,19 @@ public class PluginManager {
 		return fproxyTheme;
 	}
 
-	public boolean loadOfficialPluginsFromWeb() {
-		return alwaysLoadOfficialPluginsFromCentralServer;
-	}
-
 	public void unregisterPlugin(PluginInfoWrapper wrapper, FredPlugin plug, boolean reloading) {
 		unregisterPluginToadlet(wrapper);
 		if(wrapper.isConfigurablePlugin()) {
 			core.getToadletContainer().unregister(wrapper.getConfigToadlet());
 		}
 		if(wrapper.isIPDetectorPlugin())
-			node.ipDetector.unregisterIPDetectorPlugin((FredPluginIPDetector)plug);
+			node.getIpDetector().unregisterIPDetectorPlugin((FredPluginIPDetector)plug);
 		if(wrapper.isPortForwardPlugin())
-			node.ipDetector.unregisterPortForwardPlugin((FredPluginPortForward)plug);
+			node.getIpDetector().unregisterPortForwardPlugin((FredPluginPortForward)plug);
 		if(wrapper.isBandwidthIndicator())
-			node.ipDetector.unregisterBandwidthIndicatorPlugin((FredPluginBandwidthIndicator)plug);
+			node.getIpDetector().unregisterBandwidthIndicatorPlugin((FredPluginBandwidthIndicator)plug);
 		if(!reloading)
-			node.nodeUpdater.stopPluginUpdater(wrapper.getFilename());
+			node.getNodeUpdater().stopPluginUpdater(wrapper.getFilename());
 	}
 
     public boolean isEnabled() {
@@ -1605,10 +1588,15 @@ public class PluginManager {
 			}
 		}
 
+		/**
+		 * @return a copy of the starting plugins. Do not modify this: modifications will get thrown away.
+		 */
 		public Collection<PluginProgress> getStartingPlugins() {
+			Set<PluginProgress> startingPluginsCopy;
 			synchronized (this) {
-				return startingPlugins;
+				startingPluginsCopy = new HashSet<>(startingPlugins);
 			}
+			return startingPluginsCopy;
 		}
 
 		public void removeStartingPlugin(PluginProgress pluginProgress) {
@@ -1617,10 +1605,15 @@ public class PluginManager {
 			}
 		}
 
+		/**
+		 * @return a copy of the loaded plugins. Do not modify this: modifications will get thrown away.
+		 */
 		public Collection<PluginInfoWrapper> getLoadedPlugins() {
+			Set<PluginInfoWrapper> loadedPluginsCopy;
 			synchronized (this) {
-				return loadedPlugins;
+				loadedPluginsCopy = new HashSet<>(loadedPlugins);
 			}
+			return loadedPluginsCopy;
 		}
 
 		public void removeLoadedPlugin(PluginInfoWrapper pluginInfoWrapper) {
@@ -1689,6 +1682,10 @@ public class PluginManager {
 			}
 			return false;
 		}
+	}
+
+	public RequestClient getSingleUpdaterRequestClient() {
+		return singleUpdaterRequestClient;
 	}
 
 }

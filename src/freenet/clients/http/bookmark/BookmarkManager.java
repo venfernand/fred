@@ -74,8 +74,8 @@ public class BookmarkManager implements RequestClient {
 	public BookmarkManager(NodeClientCore n, boolean publicGateway) {
 		putPaths("/", MAIN_CATEGORY);
 		this.node = n;
-		this.bookmarksFile = n.node.userDir().file("bookmarks.dat");
-		this.backupBookmarksFile = n.node.userDir().file("bookmarks.dat.bak");
+		this.bookmarksFile = n.getNode().userDir().file("bookmarks.dat");
+		this.backupBookmarksFile = n.getNode().userDir().file("bookmarks.dat.bak");
 
 		try {
 			// Read the backup file if necessary
@@ -259,7 +259,7 @@ public class BookmarkManager implements RequestClient {
 				try {
 					USK u = ((BookmarkItem) bookmark).getUSK();
 					if(!wantUSK(u, (BookmarkItem)bookmark)) {
-						this.node.uskManager.unsubscribe(u, this.uskCB);
+						this.node.getUskManager().unsubscribe(u, this.uskCB);
 					}
 				} catch(MalformedURLException mue) {
 				}
@@ -341,7 +341,7 @@ public class BookmarkManager implements RequestClient {
 		synchronized(bookmarks) {
 			if(isSavingBookmarksLazy) return;
 			isSavingBookmarksLazy = true;
-			node.node.ticker.queueTimedJob(new Runnable() {
+			node.getNode().getTicker().queueTimedJob(new Runnable() {
 
 				@Override
 				public void run() {
@@ -394,7 +394,7 @@ public class BookmarkManager implements RequestClient {
 		if("USK".equals(item.getKeyType()))
 			try {
 				USK u = item.getUSK();
-				this.node.uskManager.subscribe(u, this.uskCB, true, this);
+				this.node.getUskManager().subscribe(u, this.uskCB, true, this);
 			} catch(MalformedURLException mue) {}
 	}
 
@@ -415,7 +415,7 @@ public class BookmarkManager implements RequestClient {
 					for (int i = 0; i < nbBookmarks; i++) {
 						SimpleFieldSet subset = sfs.getSubset(BookmarkItem.NAME + i);
 						try {
-							BookmarkItem item = new BookmarkItem(subset, this, node.alerts);
+							BookmarkItem item = new BookmarkItem(subset, this, node.getAlerts());
 							String name = (isRoot ? "" : prefix + category.name) + '/' + item.name;
 							putPaths(name, item);
 							category.addBookmark(item);

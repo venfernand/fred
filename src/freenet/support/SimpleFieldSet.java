@@ -14,7 +14,6 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.StringReader;
 import java.io.StringWriter;
-import java.io.UnsupportedEncodingException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -30,6 +29,8 @@ import java.util.Set;
 import freenet.node.FSParseException;
 import freenet.support.io.LineReader;
 import freenet.support.io.Readers;
+
+import static java.util.Collections.emptyMap;
 
 /**
  * @author amphibian
@@ -199,7 +200,7 @@ public class SimpleFieldSet {
 				Logger.error(this, "No end marker");
 				break;
 			}
-			if ((line.length() == 0)) continue; // ignore
+			if (line.isEmpty()) continue; // ignore
 			firstLine = false;
 
 			char first = line.charAt(0);
@@ -210,7 +211,7 @@ public class SimpleFieldSet {
 
 			} else {
 				if (headerSection) {
-					if (headers.size() > 0) { this.header = headers.toArray(new String[headers.size()]); }
+					if (!headers.isEmpty()) { this.header = headers.toArray(new String[headers.size()]); }
 					headerSection = false;
 				}
 
@@ -219,7 +220,7 @@ public class SimpleFieldSet {
 					// Mapping
 					String before = line.substring(0, index).trim();
 					String after = line.substring(index+1);
-					if((!after.isEmpty()) && after.charAt(0) == '=' && allowBase64) {
+					if(!after.isEmpty() && after.charAt(0) == '=' && allowBase64) {
 						try {
 							after = after.substring(1);
 							after = after.replaceAll("\\s", "");
@@ -802,7 +803,7 @@ public class SimpleFieldSet {
      * @return
      */
     public Map<String, SimpleFieldSet> directSubsets() {
-        return Collections.unmodifiableMap(subsets);
+        return subsets == null ? emptyMap() : Collections.unmodifiableMap(subsets);
     }
 
     /** Tolerant put(); does nothing if fs is empty */
@@ -1280,7 +1281,7 @@ public class SimpleFieldSet {
 		double[] ret = new double[strings.length];
 		for(int i=0;i<strings.length;i++) {
 			try {
-				ret[i] = Double.valueOf(strings[i]);
+				ret[i] = Double.parseDouble(strings[i]);
 			} catch(NumberFormatException e) {
 				Logger.error(this, "Cannot parse "+strings[i]+" : "+e,e);
 				return null;
@@ -1296,7 +1297,7 @@ public class SimpleFieldSet {
 		float[] ret = new float[strings.length];
 		for(int i=0;i<strings.length;i++) {
 			try {
-				ret[i] = Float.valueOf(strings[i]);
+				ret[i] = Float.parseFloat(strings[i]);
 			} catch(NumberFormatException e) {
 				Logger.error(this, "Cannot parse "+strings[i]+" : "+e,e);
 				return null;
@@ -1312,7 +1313,7 @@ public class SimpleFieldSet {
         boolean[] ret = new boolean[strings.length];
         for(int i=0;i<strings.length;i++) {
             try {
-                ret[i] = Boolean.valueOf(strings[i]);
+                ret[i] = Boolean.parseBoolean(strings[i]);
             } catch(NumberFormatException e) {
                 Logger.error(this, "Cannot parse "+strings[i]+" : "+e,e);
                 return null;

@@ -1,5 +1,6 @@
 package freenet.client.async;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -106,9 +107,7 @@ public class InsertCompressor implements CompressJob {
 			boolean first = true;
 			long amountOfDataToCheckCompressionRatio = config.get("node").getLong("amountOfDataToCheckCompressionRatio");
 			int minimumCompressionPercentage = config.get("node").getInt("minimumCompressionPercentage");
-			int maxTimeForSingleCompressor = config.get("node").getInt("maxTimeForSingleCompressor");
 			for (final COMPRESSOR_TYPE comp : comps) {
-				long compressionStartTime = System.currentTimeMillis();
 				boolean shouldFreeOnFinally = true;
 				RandomAccessBucket result = null;
 				try {
@@ -215,9 +214,6 @@ public class InsertCompressor implements CompressJob {
 						result.free();
 				}
 
-				// if one iteration of compression took a lot of time, then we will not try other algorithms
-				if (System.currentTimeMillis() - compressionStartTime > maxTimeForSingleCompressor)
-					break;
 			}
 
 			final CompressionOutput output = new CompressionOutput(bestCompressedData, bestCodec, hashes);

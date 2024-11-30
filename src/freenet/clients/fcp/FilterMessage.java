@@ -10,9 +10,9 @@ import java.net.URISyntaxException;
 import freenet.client.DefaultMIMETypes;
 import freenet.client.async.ClientContext;
 import freenet.client.filter.ContentFilter;
+import freenet.client.filter.ContentFilter.FilterStatus;
 import freenet.client.filter.FilterOperation;
 import freenet.client.filter.UnsafeContentTypeException;
-import freenet.client.filter.ContentFilter.FilterStatus;
 import freenet.node.FSParseException;
 import freenet.node.Node;
 import freenet.support.Logger;
@@ -174,7 +174,7 @@ public class FilterMessage extends DataCarryingMessage {
 			InputStream input = bucket.getInputStream();
 			OutputStream output = resultBucket.getOutputStream()
 		) {
-			FilterStatus status = applyFilter(input, output, handler.server.core.clientContext);
+			FilterStatus status = applyFilter(input, output, handler.getServer().getCore().getClientContext());
 			resultCharset = status.charset;
 			resultMimeType = status.mimeType;
 		} catch (UnsafeContentTypeException e) {

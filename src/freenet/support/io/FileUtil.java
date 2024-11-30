@@ -3,7 +3,18 @@
  * http://www.gnu.org/ for further details of the GPL. */
 package freenet.support.io;
 
-import java.io.*;
+import java.io.BufferedInputStream;
+import java.io.DataInputStream;
+import java.io.EOFException;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.lang.reflect.Method;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
@@ -23,8 +34,8 @@ import freenet.client.DefaultMIMETypes;
 import freenet.node.NodeStarter;
 import freenet.support.LogThresholdCallback;
 import freenet.support.Logger;
-import freenet.support.StringValidityChecker;
 import freenet.support.Logger.LogLevel;
+import freenet.support.StringValidityChecker;
 
 final public class FileUtil {
 
@@ -92,8 +103,8 @@ final public class FileUtil {
 			this.isWindows = win;
 			this.isMac = mac;
 			this.isUnix = unix;
-		};
-	};
+		}
+	}
 	
 	public enum CPUArchitecture {
 	    Unknown,

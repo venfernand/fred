@@ -173,7 +173,6 @@ public class MasterKeys {
 				MasterKeys ret = new MasterKeys(clientCacheKey, databaseKey, tempfilesMasterSecret, flags);
 				clear(data);
 				clear(hash);
-				SHA256.returnMessageDigest(md);
 				System.err.println("Read old master keys file");
 				if (mustWrite) {
 					ret.changePassword(masterKeysFile, password, hardRandom);
@@ -181,10 +180,6 @@ public class MasterKeys {
 				return ret;
 			} catch (FileNotFoundException e) {
 				// Ok, create a new one.
-			} catch (UnsupportedEncodingException e) {
-				// Impossible
-				System.err.println("JVM doesn't support UTF-8, this should be impossible!");
-				throw new Error(e);
 			} catch (EOFException e) {
 				throw new MasterKeysFileSizeException(false);
 			}
@@ -254,7 +249,6 @@ public class MasterKeys {
         MasterKeys ret = new MasterKeys(clientCacheKey, databaseKey, tempfilesMasterSecret, flags);
         clear(data);
         clear(hash);
-        SHA256.returnMessageDigest(md);
         return ret;
     }
 
@@ -287,7 +281,7 @@ public class MasterKeys {
         md.update(salt);
         byte[] outerKey = md.digest();
         long iterations = 0;
-        if(!newPassword.equals("")) {
+        if(!newPassword.isEmpty()) {
             long startTime = System.currentTimeMillis();
             while(System.currentTimeMillis() < startTime + ITERATE_TIME && iterations < MAX_ITERATIONS-20) {
                 for(int i=0;i<10;i++) {
@@ -315,7 +309,6 @@ public class MasterKeys {
 		
 		md.update(data, hashedStart, data.length-hashedStart);
 		byte[] hash = md.digest();
-        SHA256.returnMessageDigest(md); md = null;
 		baos.write(hash, 0, HASH_LENGTH);
 		data = baos.toByteArray();
 
@@ -348,8 +341,20 @@ public class MasterKeys {
 		FileUtil.secureDelete(masterKeysFile);
 	}
 
-	public DatabaseKey createDatabaseKey(Random random) {
-	    return new DatabaseKey(databaseKey, random);
+	/**
+	 * @param unused randomness source object. Note: this parameter is not used in this call,
+	 *               and database key material is generated
+	 *               during or before construction of the {@link MasterKeys} object.
+	 * @return database key object
+	 * @deprecated use other {@link #createDatabaseKey()} method without parameters
+	 */
+	@Deprecated
+	public DatabaseKey createDatabaseKey(Random unused) {
+		return createDatabaseKey();
+	}
+
+	public DatabaseKey createDatabaseKey() {
+		return new DatabaseKey(databaseKey);
 	}
 
 	/** Used for creating keys for persistent encrypted tempfiles */

@@ -4,7 +4,6 @@ import static java.util.concurrent.TimeUnit.HOURS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -12,7 +11,13 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.text.DecimalFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import freenet.client.FetchException;
 import freenet.client.HighLevelSimpleClient;
@@ -28,8 +33,8 @@ import freenet.io.xfer.PacketThrottle;
 import freenet.keys.FreenetURI;
 import freenet.l10n.NodeL10n;
 import freenet.node.DarknetPeerNode;
-import freenet.node.DarknetPeerNode.FRIEND_VISIBILITY;
 import freenet.node.DarknetPeerNode.FRIEND_TRUST;
+import freenet.node.DarknetPeerNode.FRIEND_VISIBILITY;
 import freenet.node.FSParseException;
 import freenet.node.Node;
 import freenet.node.NodeClientCore;
@@ -112,38 +117,42 @@ public abstract class ConnectionsToadlet extends Toadlet {
 		}
 
 		protected int customCompare(PeerNodeStatus firstNode, PeerNodeStatus secondNode, String sortBy2) {
-			if(sortBy.equals("address")){
+			switch (sortBy) {
+				case "address":
 				return firstNode.getPeerAddress().compareToIgnoreCase(secondNode.getPeerAddress());
-			}else if(sortBy.equals("location")){
+				case "location":
 				return compareLocations(firstNode, secondNode);
-			}else if(sortBy.equals("version")){
+				case "version":
 				return Version.getArbitraryBuildNumber(firstNode.getVersion(), -1) - Version.getArbitraryBuildNumber(secondNode.getVersion(), -1);
-			}else if(sortBy.equals("backoffRT")){
+				case "backoffRT":
 				return Double.compare(firstNode.getBackedOffPercent(true), secondNode.getBackedOffPercent(true));
-			}else if(sortBy.equals("backoffBulk")){
+				case "backoffBulk":
 				return Double.compare(firstNode.getBackedOffPercent(false), secondNode.getBackedOffPercent(false));
-			}else if(sortBy.equals(("overload_p"))){
+				case "overload_p":
 				return Double.compare(firstNode.getPReject(), secondNode.getPReject());
-			}else if(sortBy.equals(("idle"))){
+				case "idle":
 				return compareLongs(firstNode.getTimeLastConnectionCompleted(), secondNode.getTimeLastConnectionCompleted());
-			}else if(sortBy.equals("time_routable")){
+				case "time_routable":
 				return Double.compare(firstNode.getPercentTimeRoutableConnection(), secondNode.getPercentTimeRoutableConnection());
-			}else if(sortBy.equals("total_traffic")){
-				long total1 = firstNode.getTotalInputBytes()+firstNode.getTotalOutputBytes();
-				long total2 = secondNode.getTotalInputBytes()+secondNode.getTotalOutputBytes();
+				case "total_traffic": {
+					long total1 = firstNode.getTotalInputBytes() + firstNode.getTotalOutputBytes();
+					long total2 = secondNode.getTotalInputBytes() + secondNode.getTotalOutputBytes();
 				return compareLongs(total1, total2);
-				}else if(sortBy.equals("total_traffic_since_startup")){
-					long total1 = firstNode.getTotalInputSinceStartup()+firstNode.getTotalOutputSinceStartup();
-					long total2 = secondNode.getTotalInputSinceStartup()+secondNode.getTotalOutputSinceStartup();
+				}
+				case "total_traffic_since_startup": {
+					long total1 = firstNode.getTotalInputSinceStartup() + firstNode.getTotalOutputSinceStartup();
+					long total2 = secondNode.getTotalInputSinceStartup() + secondNode.getTotalOutputSinceStartup();
 					return compareLongs(total1, total2);
-			}else if(sortBy.equals("selection_percentage")){
+				}
+				case "selection_percentage":
 				return Double.compare(firstNode.getSelectionRate(), secondNode.getSelectionRate());
-			}else if(sortBy.equals("time_delta")){
+				case "time_delta":
 				return compareLongs(firstNode.getClockDelta(), secondNode.getClockDelta());
-			}else if(sortBy.equals(("uptime"))){
+				case "uptime":
 				return compareInts(firstNode.getReportedUptimePercentage(), secondNode.getReportedUptimePercentage());
-			}else
+				default:
 				return 0;
+		}
 		}
 
 		private int compareLocations(PeerNodeStatus firstNode, PeerNodeStatus secondNode) {
@@ -171,8 +180,8 @@ public abstract class ConnectionsToadlet extends Toadlet {
 		super(client);
 		this.node = n;
 		this.core = core;
-		this.stats = n.nodeStats;
-		this.peers = n.peers;
+		this.stats = n.getNodeStats();
+		this.peers = n.getPeers();
 	    REF_LINK = HTMLNode.link(path()+"myref.fref").setReadOnly();
 	    REFTEXT_LINK = HTMLNode.link(path()+"myref.txt").setReadOnly();
 	}
@@ -258,7 +267,7 @@ public abstract class ConnectionsToadlet extends Toadlet {
 			if(advancedMode) {
 
 				/* node status values */
-				long nodeUptimeSeconds = SECONDS.convert(now - node.startupTime, MILLISECONDS);
+				long nodeUptimeSeconds = SECONDS.convert(now - node.getStartupTime(), MILLISECONDS);
 				int bwlimitDelayTime = (int) stats.getBwlimitDelayTime();
 				int nodeAveragePingTime = (int) stats.getNodeAveragePingTime();
 				int networkSizeEstimateSession = stats.getDarknetSizeEstimate(-1);
@@ -467,7 +476,7 @@ public abstract class ConnectionsToadlet extends Toadlet {
 
 				double totalSelectionRate = 0.0;
 				//calculate the total selection rate using all peers, not just the peers for the current mode,
-				PeerNodeStatus[] allPeerNodeStatuses = node.peers.getPeerNodeStatuses(true);
+				PeerNodeStatus[] allPeerNodeStatuses = node.getPeers().getPeerNodeStatuses(true);
 				for(PeerNodeStatus status : allPeerNodeStatuses) {
 					totalSelectionRate += status.getSelectionRate();
 				}
@@ -498,7 +507,7 @@ public abstract class ConnectionsToadlet extends Toadlet {
 								//i now points to the proper location (equal, insertion point, or end-of-list)
 								//maybe better called "reverseGroup"?
 								List<PeerNodeStatus> peerGroup;
-								if (i<max && locations.get(i).doubleValue()==location) {
+								if (i<max && locations.get(i) ==location) {
 									peerGroup=peerGroups.get(i);
 								} else {
 									peerGroup=new ArrayList<PeerNodeStatus>();
@@ -562,7 +571,7 @@ public abstract class ConnectionsToadlet extends Toadlet {
 						foafRow.addChild("td", String.valueOf(peersWithFriend.size()));
 						HTMLNode locationCell=foafRow.addChild("td", "class", "peer-location");
 						for (PeerNodeStatus peerNodeStatus : peersWithFriend) {
-							String address=((peerNodeStatus.getPeerAddress() != null) ? (peerNodeStatus.getPeerAddress() + ':' + peerNodeStatus.getPeerPort()) : (l10n("unknownAddress")));
+							String address=((peerNodeStatus.getPeerAddress() != null) ? peerNodeStatus.getPeerAddressAndPort() : (l10n("unknownAddress")));
 							locationCell.addChild("i", address);
 							locationCell.addChild("br");
 						}
@@ -587,7 +596,7 @@ public abstract class ConnectionsToadlet extends Toadlet {
 		// our reference
 		if(shouldDrawNoderefBox(advancedMode)) {
 			drawAddPeerBox(contentNode, ctx);
-			drawNoderefBox(contentNode, getNoderef(), true);
+			drawNoderefBox(contentNode, getNoderef());
 		}
 		
 		this.writeHTMLReply(ctx, 200, "OK", pageNode.generate());
@@ -625,7 +634,7 @@ public abstract class ConnectionsToadlet extends Toadlet {
 				privateComment = request.getPartAsStringFailsafe("peerPrivateNote", 250).trim();
 
 			if (Boolean.parseBoolean(request.getPartAsStringFailsafe("peers-offers-files", 5))) {
-				File[] files = core.node.runDir().file("peers-offers").listFiles();
+				File[] files = core.getNode().runDir().file("peers-offers").listFiles();
 				if (files != null && files.length > 0) {
 					StringBuilder peersOffersFilesContent = new StringBuilder();
 					for (final File file : files) {
@@ -638,17 +647,17 @@ public abstract class ConnectionsToadlet extends Toadlet {
 					reftext = peersOffersFilesContent.toString();
 				}
 
-				node.config.get("node").set("peersOffersDismissed", true);
+				node.getConfig().get("node").set("peersOffersDismissed", true);
 			}
 			
 			String trustS = request.getPartAsStringFailsafe("trust", 10);
 			FRIEND_TRUST trust = null;
-			if(trustS != null && !trustS.equals(""))
+			if(trustS != null && !trustS.isEmpty())
 				trust = FRIEND_TRUST.valueOf(trustS);
 			
 			String visibilityS = request.getPartAsStringFailsafe("visibility", 10);
 			FRIEND_VISIBILITY visibility = null;
-			if(visibilityS != null && !visibilityS.equals(""))
+			if(visibilityS != null && !visibilityS.isEmpty())
 				visibility = FRIEND_VISIBILITY.valueOf(visibilityS);
 			
 			if(trust == null && !isOpennet()) {
@@ -664,7 +673,7 @@ public abstract class ConnectionsToadlet extends Toadlet {
 			}
 			
 			StringBuilder ref;
-			if (urltext.length() > 0) {
+			if (!urltext.isEmpty()) {
 				// fetch reference from a URL
 				try {
 					FreenetURI refUri = new FreenetURI(urltext);
@@ -677,7 +686,7 @@ public abstract class ConnectionsToadlet extends Toadlet {
 					this.sendErrorPage(ctx, 200, l10n("failedToAddNodeTitle"), NodeL10n.getBase().getString("DarknetConnectionsToadlet.cantFetchNoderefURL", new String[]{"url"}, new String[]{urltext}), !isOpennet());
 					return;
 				}
-			} else if (reftext.length() > 0) {
+			} else if (!reftext.isEmpty()) {
 				// read from post data or file upload
 				// this slightly scary looking regexp chops any extra characters off the beginning or ends of lines and removes extra line breaks
 				ref = new StringBuilder(reftext.replaceAll(".*?((?:[\\w,\\.]+\\=[^\r\n]+?)|(?:End))[ \\t]*(?:\\r?\\n)+", "$1\n"));
@@ -727,7 +736,7 @@ public abstract class ConnectionsToadlet extends Toadlet {
 				PeerAdditionReturnCodes result=addNewNode(nodesToAdd[i].trim().concat("\nEnd"), privateComment, trust, visibility);
 				//Store the result
 				Integer prev = results.get(result);
-				if(prev == null) prev = Integer.valueOf(0);
+				if(prev == null) prev = 0;
 				results.put(result, prev+1);
 			}
 			
@@ -857,13 +866,10 @@ public abstract class ConnectionsToadlet extends Toadlet {
 	final HTMLNode REFTEXT_LINK;
 
 	/**
-	 *
 	 * @param contentNode Node to add noderef box to.
 	 * @param fs Noderef to render as text if requested.
-	 * @param showNoderef If true, render the text of the noderef so that it may be copy-pasted. If false, only
-	 *                    show a link to download it.
 	 */
-	void drawNoderefBox(HTMLNode contentNode, SimpleFieldSet fs, boolean showNoderef) {
+	void drawNoderefBox(HTMLNode contentNode, SimpleFieldSet fs) {
 		HTMLNode referenceInfobox = contentNode.addChild("div", "class", "infobox infobox-normal");
 		HTMLNode headerReferenceInfobox = referenceInfobox.addChild("div", "class", "infobox-header");
 		// FIXME better way to deal with this sort of thing???
@@ -882,13 +888,17 @@ public abstract class ConnectionsToadlet extends Toadlet {
 			myName.addChild("span", "]");
 		}
 
-		if (showNoderef) {
 			HTMLNode warningSentence = referenceInfoboxContent.addChild("p");
 			NodeL10n.getBase().addL10nSubstitution(warningSentence, "DarknetConnectionsToadlet.referenceCopyWarning",
 					new String[] { "bold" },
 					new HTMLNode[] { HTMLNode.STRONG });
 			referenceInfoboxContent.addChild("pre", "id", "reference", fs.toOrderedStringWithBase64() + '\n');
+
+		if(!isOpennet()) {
+			HTMLNode myIps = referenceInfoboxContent.addChild("p");
+			myIps.addChild("span", NodeL10n.getBase().getString("DarknetConnectionsToadlet.myIps", "ips", fs.get("physical.udp")));
 		}
+
 	}
 
 	protected abstract String getPageTitle(String titleCountString);
@@ -982,7 +992,7 @@ public abstract class ConnectionsToadlet extends Toadlet {
 			country.renderFlagIcon(addressRow);
 		}
 
-		addressRow.addChild("#", ((peerNodeStatus.getPeerAddress() != null) ? (peerNodeStatus.getPeerAddress() + ':' + peerNodeStatus.getPeerPort()) : (l10n("unknownAddress"))) + pingTime);
+		addressRow.addChild("#", ((peerNodeStatus.getPeerAddress() != null) ? peerNodeStatus.getPeerAddressAndPort() : (l10n("unknownAddress"))) + pingTime);
 
 		// version column
 		if (peerNodeStatus.getStatusValue() != PeerManager.PEER_NODE_STATUS_NEVER_CONNECTED && (peerNodeStatus.isPublicInvalidVersion() || peerNodeStatus.isPublicReverseInvalidVersion())) {  // Don't draw attention to a version problem if NEVER CONNECTED
@@ -1143,7 +1153,7 @@ public abstract class ConnectionsToadlet extends Toadlet {
 			String messageName = entry.getKey();
 			Long messageCount = entry.getValue();
 			messageNames.add(messageName);
-			messageCounts.put(messageName, new Long[] { messageCount, Long.valueOf(0) });
+			messageCounts.put(messageName, new Long[] { messageCount, 0L});
 		}
 		for (Map.Entry<String,Long> entry : peerNodeStatus.getLocalMessagesSent().entrySet() ) {
 			String messageName =  entry.getKey();
@@ -1153,7 +1163,7 @@ public abstract class ConnectionsToadlet extends Toadlet {
 			}
 			Long[] existingCounts = messageCounts.get(messageName);
 			if (existingCounts == null) {
-				messageCounts.put(messageName, new Long[] { Long.valueOf(0), messageCount });
+				messageCounts.put(messageName, new Long[] {0L, messageCount });
 			} else {
 				existingCounts[1] = messageCount;
 			}
